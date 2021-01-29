@@ -1,6 +1,6 @@
 <component name="ArtifactManager">
   <artifact type="jar" build-on-make="true" name="ScriptableNetworkTest:jar">
-    <output-path>$PROJECT_DIR$/out/artifacts/ScriptableNetworkTest_jar</output-path>
+    <output-path>$PROJECT_DIR$</output-path>
     <root id="archive" name="ScriptableNetworkTest-Java6.jar">
       <element id="module-output" name="ScriptableNetworkTest-Java6" />
     </root>

@@ -1,0 +1,15 @@
+sleep 500
+#abc
+sync
+flood 1000 8190
+sync
+flood 1000 8190
+sync
+hold server 1000
+release server 500
+sync
+hold client 1000
+release client 500
+sync
+release server 500
+sync

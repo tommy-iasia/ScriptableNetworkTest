@@ -4,7 +4,7 @@ This is a batch friendly network speed testing tool.
 ## Usage
 This tool should be used in pair - server mode and client mode.
 
-First, you start the server mode by **server.bat**
+First, you start the server mode by **server.bat**.
 ````
 java -cp ScriptableNetworkTest-Java6.jar runner.Server 127.0.0.1 34500
 ````
@@ -18,7 +18,7 @@ java -cp ScriptableNetworkTest-Java6.jar runner.Client 127.0.0.1 34500 test.scri
 
 Afterwards, you will see the client connects to server and run the script.
 
-> Usually, server and client being in different machines, adjust the IP accordingly.
+> Usually, server and client being in different machines, change the IP and port from *127.0.0.1:34500* to your needed address.
 
 ## Script
 ````

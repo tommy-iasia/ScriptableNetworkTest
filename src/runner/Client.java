@@ -211,7 +211,7 @@ public class Client {
                 + count / 1000 + "kp / " + count + "p / "
                 + readTime / 1000 / 1000 + "ms / " + readTime + "ns");
 
-        long bandwidth = 8 * readLength * 1000 / usedTime;
+        long bandwidth = 8 * readLength * 1000 / (usedTime > 0 ? usedTime : 1);
         log("bandwidth " + bandwidth / 1024 / 1024 + "Mbps / " + bandwidth + "bps");
 
         log("flood completed");

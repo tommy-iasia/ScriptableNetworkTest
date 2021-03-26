@@ -101,7 +101,7 @@ public class Server {
             return;
         }
 
-        RegexMatch udpFloodMatch = RegexMatch.create(instruction, "flood (?:UDP|udp) (\\S+) (\\d+) (\\d+) (\\d+) (\\d+)?");
+        RegexMatch udpFloodMatch = RegexMatch.create(instruction, "flood (?:UDP|udp) (\\S+) (\\d+) (\\d+) (\\d+)(?: (\\d+))?");
         if (udpFloodMatch.find()) {
             String group = udpFloodMatch.get(1);
             int port = udpFloodMatch.getInt(2);
@@ -165,7 +165,8 @@ public class Server {
 
     public final static byte floodContent = 77;
     private static void floodTcp(SocketChannel channel, long timeLength, int bufferSize, long limitBandwidth) throws IOException {
-        log("flood through TCP for " + timeLength + "ms with " + bufferSize + "B buffer at " + limitBandwidth + "bps...");
+        log("flood through TCP for " + timeLength + "ms with " + bufferSize + "B buffer "
+                + "at " + (limitBandwidth >= Long.MAX_VALUE ? "maximum speed" : limitBandwidth + "bps") + "...");
 
         ByteBuffer buffer = ByteBuffer.allocateDirect(bufferSize);
         while (buffer.remaining() > 0) {
@@ -224,7 +225,8 @@ public class Server {
     }
 
     private static void floodUdp(String group, int port, long timeLength, int bufferSize, long limitBandwidth) throws IOException {
-        log("flood through UDP for " + timeLength + "ms with " + bufferSize + "B buffer at " + limitBandwidth + "bps...");
+        log("flood through UDP for " + timeLength + "ms with " + bufferSize + "B buffer "
+                + "at " + (limitBandwidth >= Long.MAX_VALUE ? "maximum speed" : limitBandwidth + "bps") + "...");
 
         MulticastSocket socket = new MulticastSocket();
 

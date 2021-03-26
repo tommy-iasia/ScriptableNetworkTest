@@ -101,25 +101,25 @@ public class Server {
             return;
         }
 
-        RegexMatch udpFloodMatch = RegexMatch.create(instruction, "flood(UDP|Udp|udp) (\\w+) (\\d+) (\\d+) (\\d+) (\\d+)");
+        RegexMatch udpFloodMatch = RegexMatch.create(instruction, "flood (?:UDP|udp) (\\S+) (\\d+) (\\d+) (\\d+) (\\d+)?");
         if (udpFloodMatch.find()) {
-            String group = udpFloodMatch.get(2);
-            int port = udpFloodMatch.getInt(3);
+            String group = udpFloodMatch.get(1);
+            int port = udpFloodMatch.getInt(2);
 
-            long time = udpFloodMatch.getLong(4);
-            int bufferSize = udpFloodMatch.getInt(5);
+            long time = udpFloodMatch.getLong(3);
+            int bufferSize = udpFloodMatch.getInt(4);
 
-            long bandwidth = udpFloodMatch.getLong(6, Long.MAX_VALUE);
+            long bandwidth = udpFloodMatch.getLong(5, Long.MAX_VALUE);
 
             floodUdp(group, port, time, bufferSize, bandwidth);
             return;
         }
 
-        RegexMatch floodMatch = RegexMatch.create(instruction, "flood(TCP|Tcp|tcp)? (\\d+) (\\d+) (\\d+)");
+        RegexMatch floodMatch = RegexMatch.create(instruction, "flood(?: TCP| tcp)? (\\d+) (\\d+)(?: (\\d+))?");
         if (floodMatch.find()) {
-            long time = floodMatch.getLong(2);
-            int bufferSize = floodMatch.getInt(3);
-            long bandwidth = floodMatch.getLong(4, Long.MAX_VALUE);
+            long time = floodMatch.getLong(1);
+            int bufferSize = floodMatch.getInt(2);
+            long bandwidth = floodMatch.getLong(3, Long.MAX_VALUE);
 
             floodTcp(channel, time, bufferSize, bandwidth);
             return;
@@ -165,7 +165,7 @@ public class Server {
 
     public final static byte floodContent = 77;
     private static void floodTcp(SocketChannel channel, long timeLength, int bufferSize, long limitBandwidth) throws IOException {
-        log("flood through TCP for " + timeLength + "ms with " + bufferSize + "B buffer...");
+        log("flood through TCP for " + timeLength + "ms with " + bufferSize + "B buffer at " + limitBandwidth + "bps...");
 
         ByteBuffer buffer = ByteBuffer.allocateDirect(bufferSize);
         while (buffer.remaining() > 0) {
@@ -185,7 +185,7 @@ public class Server {
                 break;
             }
 
-            long limitLength = (currentTime - startTime) * limitBandwidth / 1000;
+            long limitLength = (currentTime - startTime) * limitBandwidth / 1000 / 8;
             if (writeLength >= limitLength) {
                 continue;
             }
@@ -224,12 +224,9 @@ public class Server {
     }
 
     private static void floodUdp(String group, int port, long timeLength, int bufferSize, long limitBandwidth) throws IOException {
-        log("flood through UDP for " + timeLength + "ms with " + bufferSize + "B buffer...");
+        log("flood through UDP for " + timeLength + "ms with " + bufferSize + "B buffer at " + limitBandwidth + "bps...");
 
         MulticastSocket socket = new MulticastSocket();
-
-        InetSocketAddress portAddress = new InetSocketAddress(port);
-        socket.bind(portAddress);
 
         byte[] buffer = new byte[bufferSize];
         Arrays.fill(buffer, floodContent);
@@ -249,7 +246,7 @@ public class Server {
                 break;
             }
 
-            long limitLength = (currentTime - startTime) * limitBandwidth / 1000;
+            long limitLength = (currentTime - startTime) * limitBandwidth / 1000 / 8;
             if (writeLength >= limitLength) {
                 continue;
             }

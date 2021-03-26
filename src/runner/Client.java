@@ -102,19 +102,19 @@ public class Client {
             return;
         }
 
-        RegexMatch udpFloodMatch = RegexMatch.create(instruction, "flood(UDP|Udp|udp) (\\w+) (\\d+) (\\d+) (\\d+)");
+        RegexMatch udpFloodMatch = RegexMatch.create(instruction, "flood (?:UDP|udp) (\\S+) (\\d+) (\\d+) (\\d+)(?: (\\d+))?");
         if (udpFloodMatch.find()) {
-            String group = udpFloodMatch.get(2);
-            int port = udpFloodMatch.getInt(3);
+            String group = udpFloodMatch.get(1);
+            int port = udpFloodMatch.getInt(2);
 
-            long time = udpFloodMatch.getLong(4);
-            int bufferSize = udpFloodMatch.getInt(5);
+            long time = udpFloodMatch.getLong(3);
+            int bufferSize = udpFloodMatch.getInt(4);
 
             floodUdp(channel, group, port, time, bufferSize);
             return;
         }
 
-        RegexMatch tcpFloodMatch = RegexMatch.create(instruction, "flood(TCP|Tcp|tcp)? (\\d+) (\\d+)");
+        RegexMatch tcpFloodMatch = RegexMatch.create(instruction, "flood(?: TCP| tcp)? (\\d+) (\\d+)(?: (\\d+))?");
         if (tcpFloodMatch.find()) {
             long time = tcpFloodMatch.getLong(1);
             int bufferSize = tcpFloodMatch.getInt(2);

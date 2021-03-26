@@ -49,7 +49,7 @@ You are expected to write scripts using the operations with different parameters
 ## Statistics
 After flooding the network, statistics will be calculated
 ````
-flood for 10000ms with 8190B buffer...
+flood through TCP for 10000ms with 8190B buffer at 9223372036854775807b/s...
 used 10s / 10001ms
 written 11178MB / 11720987460B / 1431kp / 1431134p / 9951ms / 9951797000ns
 bandwidth 8941Mbps / 9375852382bps

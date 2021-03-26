@@ -1,18 +1,14 @@
 package runner;
 
-import utility.HoldMemory;
-import utility.LogFile;
-import utility.Regex;
-import utility.SocketChannelUtility;
+import utility.*;
 
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.regex.Matcher;
+import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 
 public class Server {
 
@@ -97,57 +93,62 @@ public class Server {
             return;
         }
 
-        Matcher sleepMatcher = Regex.find(instruction, "sleep (\\d+)");
-        if (sleepMatcher != null) {
-            String lengthText = sleepMatcher.group(1);
-            int lengthValue = Integer.parseInt(lengthText);
+        RegexMatch sleepMatch = RegexMatch.create(instruction, "sleep (\\d+)");
+        if (sleepMatch.find()) {
+            int length = sleepMatch.getInt(1);
 
-            sleep(lengthValue);
+            sleep(length);
             return;
         }
 
-        Matcher floodMatcher = Regex.find(instruction, "flood (\\d+) (\\d+)");
-        if (floodMatcher != null) {
-            String timeText = floodMatcher.group(1);
-            long timeValue = Long.parseLong(timeText);
+        RegexMatch udpFloodMatch = RegexMatch.create(instruction, "flood(UDP|Udp|udp) (\\w+) (\\d+) (\\d+) (\\d+) (\\d+)");
+        if (udpFloodMatch.find()) {
+            String group = udpFloodMatch.get(2);
+            int port = udpFloodMatch.getInt(3);
 
-            String bufferSizeText = floodMatcher.group(2);
-            int bufferSizeValue = Integer.parseInt(bufferSizeText);
+            long time = udpFloodMatch.getLong(4);
+            int bufferSize = udpFloodMatch.getInt(5);
 
-            flood(channel, timeValue, bufferSizeValue);
+            long bandwidth = udpFloodMatch.getLong(6, Long.MAX_VALUE);
+
+            floodUdp(group, port, time, bufferSize, bandwidth);
             return;
         }
 
-        Matcher syncMatcher = Regex.find(instruction, "sync");
-        if (syncMatcher != null) {
+        RegexMatch floodMatch = RegexMatch.create(instruction, "flood(TCP|Tcp|tcp)? (\\d+) (\\d+) (\\d+)");
+        if (floodMatch.find()) {
+            long time = floodMatch.getLong(2);
+            int bufferSize = floodMatch.getInt(3);
+            long bandwidth = floodMatch.getLong(4, Long.MAX_VALUE);
+
+            floodTcp(channel, time, bufferSize, bandwidth);
+            return;
+        }
+
+        RegexMatch syncMatch = RegexMatch.create(instruction, "sync");
+        if (syncMatch.find()) {
             sync(channel);
             return;
         }
 
-        Matcher holdMatcher = Regex.find(instruction, "hold (server|client) (\\d+)");
-        if (holdMatcher != null) {
-            String side = holdMatcher.group(1);
-
-            String countText = holdMatcher.group(2);
-            int countValue = Integer.parseInt(countText);
-
+        RegexMatch holdMatch = RegexMatch.create(instruction, "hold (server|client) (\\d+)");
+        if (holdMatch.find()) {
+            String side = holdMatch.get(1);
             if (side.equals("server")) {
-                hold(countValue);
+                int count = holdMatch.getInt(2);
+                hold(count);
             } else {
                 log("skip client hold");
             }
             return;
         }
 
-        Matcher releaseMatcher = Regex.find(instruction, "release (server|client) (\\d+)");
-        if (releaseMatcher != null) {
-            String side = releaseMatcher.group(1);
-
-            String countText = releaseMatcher.group(2);
-            int countValue = Integer.parseInt(countText);
-
+        RegexMatch releaseMatch = RegexMatch.create(instruction, "release (server|client) (\\d+)");
+        if (releaseMatch.find()) {
+            String side = releaseMatch.get(1);
             if (side.equals("server")) {
-                release(countValue);
+                int count = releaseMatch.getInt(2);
+                release(count);
             } else {
                 log("skip client release");
             }
@@ -163,8 +164,8 @@ public class Server {
     }
 
     public final static byte floodContent = 77;
-    private static void flood(SocketChannel channel, long timeLength, int bufferSize) throws IOException {
-        log("flood for " + timeLength + "ms with " + bufferSize + "B buffer...");
+    private static void floodTcp(SocketChannel channel, long timeLength, int bufferSize, long limitBandwidth) throws IOException {
+        log("flood through TCP for " + timeLength + "ms with " + bufferSize + "B buffer...");
 
         ByteBuffer buffer = ByteBuffer.allocateDirect(bufferSize);
         while (buffer.remaining() > 0) {
@@ -172,13 +173,25 @@ public class Server {
         }
 
         long startTime = System.currentTimeMillis();
-        long lastTime;
+        long lastTime = startTime;
 
         long writeLength = 0;
         long writeTime = 0;
         long count = 0;
 
         while (true) {
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - startTime > timeLength) {
+                break;
+            }
+
+            long limitLength = (currentTime - startTime) * limitBandwidth / 1000;
+            if (writeLength >= limitLength) {
+                continue;
+            }
+
+            lastTime = currentTime;
+
             buffer.rewind();
 
             long writeStart = System.nanoTime();
@@ -190,11 +203,6 @@ public class Server {
                 writeTime += writeEnd - writeStart;
                 count++;
             }
-
-            lastTime = System.currentTimeMillis();
-            if (lastTime - startTime > timeLength) {
-                break;
-            }
         }
 
         long usedTime = lastTime - startTime;
@@ -205,8 +213,76 @@ public class Server {
                 + count / 1000 + "kp / " + count + "p / "
                 + writeTime / 1000 / 1000 + "ms / " + writeTime + "ns");
 
-        long bandwidth = 8 * writeLength * 1000 / usedTime;
-        log("bandwidth " + bandwidth / 1024 / 1024 + "Mbps / " + bandwidth + "bps");
+        if (usedTime > 0) {
+            long resultBandwidth = 8 * writeLength * 1000 / usedTime;
+            log("bandwidth " + resultBandwidth / 1024 / 1024 + "Mbps / " + resultBandwidth + "bps");
+        } else {
+            log("bandwidth undetermined due to zero time");
+        }
+
+        log("flood completed");
+    }
+
+    private static void floodUdp(String group, int port, long timeLength, int bufferSize, long limitBandwidth) throws IOException {
+        log("flood through UDP for " + timeLength + "ms with " + bufferSize + "B buffer...");
+
+        MulticastSocket socket = new MulticastSocket();
+
+        InetSocketAddress portAddress = new InetSocketAddress(port);
+        socket.bind(portAddress);
+
+        byte[] buffer = new byte[bufferSize];
+        Arrays.fill(buffer, floodContent);
+
+        InetAddress groupAddress = InetAddress.getByName(group);
+
+        long startTime = System.currentTimeMillis();
+        long lastTime = startTime;
+
+        long writeLength = 0;
+        long writeTime = 0;
+        long count = 0;
+
+        while (true) {
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - startTime > timeLength) {
+                break;
+            }
+
+            long limitLength = (currentTime - startTime) * limitBandwidth / 1000;
+            if (writeLength >= limitLength) {
+                continue;
+            }
+
+            lastTime = currentTime;
+
+            DatagramPacket packet = new DatagramPacket(buffer, 0, buffer.length);
+            packet.setAddress(groupAddress);
+            packet.setPort(port);
+
+            long writeStart = System.nanoTime();
+            socket.send(packet);
+            long writeEnd = System.nanoTime();
+
+            writeLength += packet.getLength();
+            writeTime += writeEnd - writeStart;
+            count++;
+        }
+
+        long usedTime = lastTime - startTime;
+        log("used " + usedTime / 1000 + "s / " + usedTime + "ms");
+
+        log("written "
+                + writeLength / 1024 / 1024 + "MB / " + writeLength + "B / "
+                + count / 1000 + "kp / " + count + "p / "
+                + writeTime / 1000 / 1000 + "ms / " + writeTime + "ns");
+
+        if (usedTime > 0) {
+            long bandwidth = 8 * writeLength * 1000 / usedTime;
+            log("bandwidth " + bandwidth / 1024 / 1024 + "Mbps / " + bandwidth + "bps");
+        } else {
+            log("bandwidth undetermined due to zero time");
+        }
 
         log("flood completed");
     }
@@ -218,7 +294,7 @@ public class Server {
         while (true) {
             SocketChannelUtility.writeByte(channel, Server.syncStart);
 
-            Thread.sleep(1);
+            TimeUnit.MILLISECONDS.sleep(1);
 
             Byte content = SocketChannelUtility.readByte(channel);
             if (content != null && content == syncStart) {

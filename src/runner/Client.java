@@ -3,10 +3,10 @@ package runner;
 import utility.*;
 
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 
 public class Client {
@@ -61,7 +61,7 @@ public class Client {
         byte[] instructionBytes = instruction.getBytes("UTF-8");
 
         if (instructionBytes.length > instructionBuffer.capacity()) {
-            throw new RuntimeException("instruction is too long to run.");
+            throw new RuntimeException("instruction is too long.");
         }
 
         instructionBuffer.put(instructionBytes);
@@ -94,57 +94,59 @@ public class Client {
             return;
         }
 
-        Matcher sleepMatcher = Regex.find(instruction, "sleep (\\d+)");
-        if (sleepMatcher != null) {
-            String lengthText = sleepMatcher.group(1);
-            int lengthValue = Integer.parseInt(lengthText);
+        RegexMatch sleepMatch = RegexMatch.create(instruction, "sleep (\\d+)");
+        if (sleepMatch.find()) {
+            int length = sleepMatch.getInt(1);
 
-            sleep(lengthValue);
+            sleep(length);
             return;
         }
 
-        Matcher floodMatcher = Regex.find(instruction, "flood (\\d+) (\\d+)");
-        if (floodMatcher != null) {
-            String timeText = floodMatcher.group(1);
-            long timeValue = Long.parseLong(timeText);
+        RegexMatch udpFloodMatch = RegexMatch.create(instruction, "flood(UDP|Udp|udp) (\\w+) (\\d+) (\\d+) (\\d+)");
+        if (udpFloodMatch.find()) {
+            String group = udpFloodMatch.get(2);
+            int port = udpFloodMatch.getInt(3);
 
-            String bufferSizeText = floodMatcher.group(2);
-            int bufferSizeValue = Integer.parseInt(bufferSizeText);
+            long time = udpFloodMatch.getLong(4);
+            int bufferSize = udpFloodMatch.getInt(5);
 
-            flood(channel, timeValue, bufferSizeValue);
+            floodUdp(channel, group, port, time, bufferSize);
             return;
         }
 
-        Matcher syncMatcher = Regex.find(instruction, "sync");
-        if (syncMatcher != null) {
+        RegexMatch tcpFloodMatch = RegexMatch.create(instruction, "flood(TCP|Tcp|tcp)? (\\d+) (\\d+)");
+        if (tcpFloodMatch.find()) {
+            long time = tcpFloodMatch.getLong(1);
+            int bufferSize = tcpFloodMatch.getInt(2);
+
+            floodTcp(channel, time, bufferSize);
+            return;
+        }
+
+        RegexMatch syncMatch = RegexMatch.create(instruction, "sync");
+        if (syncMatch.find()) {
             sync(channel);
             return;
         }
 
-        Matcher holdMatcher = Regex.find(instruction, "hold (server|client) (\\d+)");
-        if (holdMatcher != null) {
-            String side = holdMatcher.group(1);
-
-            String countText = holdMatcher.group(2);
-            int countValue = Integer.parseInt(countText);
-
+        RegexMatch holdMatch = RegexMatch.create(instruction, "hold (server|client) (\\d+)");
+        if (holdMatch.find()) {
+            String side = holdMatch.get(1);
             if (side.equals("client")) {
-                hold(countValue);
+                int count = holdMatch.getInt(2);
+                hold(count);
             } else {
                 log("skip server hold");
             }
             return;
         }
 
-        Matcher releaseMatcher = Regex.find(instruction, "release (server|client) (\\d+)");
-        if (releaseMatcher != null) {
-            String side = releaseMatcher.group(1);
-
-            String countText = releaseMatcher.group(2);
-            int countValue = Integer.parseInt(countText);
-
+        RegexMatch releaseMatch = RegexMatch.create(instruction, "release (server|client) (\\d+)");
+        if (releaseMatch.find()) {
+            String side = releaseMatch.get(1);
             if (side.equals("client")) {
-                release(countValue);
+                int count = releaseMatch.getInt(2);
+                release(count);
             } else {
                 log("skip server release");
             }
@@ -159,8 +161,8 @@ public class Client {
         Thread.sleep(length);
     }
 
-    private static void flood(SocketChannel channel, long timeLength, int bufferSize) throws IOException {
-        log("receive flood for " + timeLength + "ms with " + bufferSize + "B buffer...");
+    private static void floodTcp(SocketChannel channel, long timeLength, int bufferSize) throws IOException {
+        log("receive flood through TCP for " + timeLength + "ms with " + bufferSize + "B buffer...");
 
         ByteBuffer buffer = ByteBuffer.allocateDirect(bufferSize);
 
@@ -215,6 +217,111 @@ public class Client {
         log("bandwidth " + bandwidth / 1024 / 1024 + "Mbps / " + bandwidth + "bps");
 
         log("flood completed");
+    }
+
+    private static void floodUdp(SocketChannel channel, String group, int port, long timeLength, final int bufferSize) throws IOException {
+        log("receive flood through UDP for " + timeLength + "ms with " + bufferSize + "B buffer...");
+
+        MulticastSocket socket = new MulticastSocket(port);
+        socket.setReceiveBufferSize(bufferSize);
+
+        socket.setInterface(channel.socket().getLocalAddress());
+
+        InetAddress groupAddress = InetAddress.getByName(group);
+        socket.joinGroup(groupAddress);
+
+        final FloodUdp flood = new FloodUdp(socket, timeLength, bufferSize);
+
+        Thread thread = new Thread(flood);
+        thread.start();
+
+        long startTime = System.currentTimeMillis();
+        while (System.currentTimeMillis() - startTime < timeLength) {
+            try { TimeUnit.MILLISECONDS.sleep(1); }
+            catch (InterruptedException ignore) { }
+        }
+
+        socket.close();
+
+        synchronized (flood.synchronizer) {
+            long usedTime = flood.lastTime - startTime;
+            log("used " + usedTime / 1000 + "s / " + usedTime + "ms");
+
+            log("read "
+                    + flood.readLength / 1024 / 1024 + "MB / " + flood.readLength + "B / "
+                    + flood.count / 1000 + "kp / " + flood.count + "p / "
+                    + flood.readTime / 1000 / 1000 + "ms / " + flood.readTime + "ns");
+
+            long bandwidth = 8 * flood.readLength * 1000 / (usedTime > 0 ? usedTime : 1);
+            log("bandwidth " + bandwidth / 1024 / 1024 + "Mbps / " + bandwidth + "bps");
+
+            log("flood completed");
+        }
+    }
+    static class FloodUdp implements Runnable {
+        FloodUdp(MulticastSocket socket, long timeLength, int bufferSize) {
+            this.socket = socket;
+
+            this.timeLength = timeLength;
+
+            buffer = new byte[bufferSize];
+        }
+
+        private final MulticastSocket socket;
+
+        public final Object synchronizer = new Object();
+
+        private final long timeLength;
+        public long startTime = System.currentTimeMillis();
+        public long lastTime = -1;
+
+        public long readLength = 0;
+        public long readTime = 0;
+        public long count = 0;
+
+        private final byte[] buffer;
+
+        @Override
+        public void run() {
+            while (true) {
+                synchronized (synchronizer) {
+                    lastTime = System.currentTimeMillis();
+                }
+                if (lastTime - startTime > timeLength) {
+                    break;
+                }
+
+                long readStart = System.nanoTime();
+
+                DatagramPacket packet = new DatagramPacket(buffer, 0, buffer.length);
+                try {
+                    socket.receive(packet);
+                } catch (IOException e) {
+                    break;
+                }
+
+                long readEnd = System.nanoTime();
+
+                if (packet.getLength() > 0) {
+                    boolean valid = false;
+
+                    for (int i = packet.getLength() - 1; i >= 0; i--) {
+                        if (buffer[i] == Server.floodContent) {
+                            valid = true;
+                            break;
+                        }
+                    }
+
+                    if (valid) {
+                        synchronized (synchronizer) {
+                            readLength += packet.getLength();
+                            readTime += readEnd - readStart;
+                            count++;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private static void sync(SocketChannel channel) throws IOException {

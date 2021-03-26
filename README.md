@@ -24,14 +24,14 @@ Afterwards, you will see the client connects to server and run the script.
 ````
 sleep 500
 sync
-flood 10000 8190
+flood tcp 10000 8190 40000000
 sync
 hold server 1000000
 release server 5000
 hold client 1000000
 release client 5000
 sync
-flood 10000 8190
+flood udp 239.1.1.1 51000 10000 8190 40000000
 sync
 ````
 

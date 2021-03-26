@@ -24,21 +24,22 @@ Afterwards, you will see the client connects to server and run the script.
 ````
 sleep 500
 sync
-flood 10000 8190
+flood tcp 10000 8190 40000000
 sync
 hold server 1000000
 release server 5000
 hold client 1000000
 release client 5000
 sync
-flood 10000 8190
+flood udp 239.1.1.1 51000 10000 8190 40000000
 sync
 ````
 
 There are 5 available operations
 
 - `sleep [time/ms]`
-- `flood [time/ms] [bufferSize/B]` floods the network by server sending and client receiving
+- `flood tcp [time/ms] [bufferSize/B] [bandwidth/bps]?` floods the network using TCP stream
+- `flood udp [group/host] [port] [time/ms] [bufferSize/B] [bandwidth/bps]?` flods the network using UDP packets
 - `sync` synchronize server and client
 - `hold [server|client] [memorySize/B]` holds memory to simulate memory consumption cases
 - `release [server|client] [memorySize/B]` releases held memory
@@ -48,7 +49,7 @@ You are expected to write scripts using the operations with different parameters
 ## Statistics
 After flooding the network, statistics will be calculated
 ````
-flood for 10000ms with 8190B buffer...
+flood through TCP for 10000ms with 8190B buffer at 9223372036854775807b/s...
 used 10s / 10001ms
 written 11178MB / 11720987460B / 1431kp / 1431134p / 9951ms / 9951797000ns
 bandwidth 8941Mbps / 9375852382bps

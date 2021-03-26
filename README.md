@@ -38,7 +38,8 @@ sync
 There are 5 available operations
 
 - `sleep [time/ms]`
-- `flood [time/ms] [bufferSize/B]` floods the network by server sending and client receiving
+- `flood tcp [time/ms] [bufferSize/B] [bandwidth/bps]?` floods the network using TCP stream
+- `flood udp [group/host] [port] [time/ms] [bufferSize/B] [bandwidth/bps]?` flods the network using UDP packets
 - `sync` synchronize server and client
 - `hold [server|client] [memorySize/B]` holds memory to simulate memory consumption cases
 - `release [server|client] [memorySize/B]` releases held memory

@@ -24,6 +24,23 @@ public class SocketChannelUtility {
         return buffer.get();
     }
 
+    public static void lookFor(SocketChannel channel, byte value) throws IOException {
+        ByteBuffer buffer = ByteBuffer.allocate(8192);
+
+        while (true) {
+            if (channel.read(buffer) > 0) {
+                buffer.flip();
+
+                while (buffer.remaining() > 0) {
+                    if (buffer.get() == value) {
+                        return;
+                    }
+                }
+
+                buffer.compact();
+            }
+        }
+    }
     public static void readUntil(SocketChannel channel, byte value) throws IOException {
         while (true) {
             Byte content = SocketChannelUtility.readByte(channel);

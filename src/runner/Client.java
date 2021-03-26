@@ -326,7 +326,7 @@ public class Client {
 
     private static void sync(SocketChannel channel) throws IOException {
         log("wait for sync start...");
-        SocketChannelUtility.readUntil(channel, Server.syncStart);
+        SocketChannelUtility.lookFor(channel, Server.syncStart);
         SocketChannelUtility.writeByte(channel, Server.syncStart);
         log("sync start received.");
 
